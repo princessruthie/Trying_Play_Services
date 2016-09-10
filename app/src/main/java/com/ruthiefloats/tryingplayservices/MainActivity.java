@@ -64,12 +64,7 @@ public class MainActivity extends AppCompatActivity
 
         if (mGoogleApiClient.hasConnectedApi(LocationServices.API)) {
             Log.i(PLAY_LOG_TAG, "location api present");
-
-            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
-                    && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-
-                Log.i(PLAY_LOG_TAG, "lacking permission, lets ask");
-
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
 
                 // TODO: Consider calling
@@ -80,14 +75,12 @@ public class MainActivity extends AppCompatActivity
                 // to handle the case where the user grants the permission. See the documentation
                 // for ActivityCompat#requestPermissions for more details.
                 return;
-            } else {
-                Location location = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
-                Log.i(PLAY_LOG_TAG, "location " + location);
             }
+            Log.i(PLAY_LOG_TAG, "onConnected location " + getLocation());
+
         } else {
             Log.i(PLAY_LOG_TAG, "no location present");
         }
-
     }
 
     @Override
@@ -101,5 +94,23 @@ public class MainActivity extends AppCompatActivity
     public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
         Log.i(PLAY_LOG_TAG, "onConnectionFailed due to cause: " + connectionResult.getErrorMessage());
         Log.i(PLAY_LOG_TAG, "onConnectionFailed due to cause: " + connectionResult.getErrorCode());
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        if (requestCode == 1) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Log.i(PLAY_LOG_TAG, "on result location " + getLocation());
+            }
+        }
+    }
+
+    private Location getLocation() {
+        try {
+            Location location = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
+            return location;
+        } catch (SecurityException e) {
+            return null;
+        }
     }
 }
