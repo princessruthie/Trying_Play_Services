@@ -9,98 +9,114 @@ import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.view.View;
 
 import com.google.android.gms.common.ConnectionResult;
-import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.location.LocationListener;
+import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.wearable.Wearable;
 
 public class MainActivity extends AppCompatActivity
-        implements GoogleApiClient.OnConnectionFailedListener, GoogleApiClient.ConnectionCallbacks {
+        implements GoogleApiClient.OnConnectionFailedListener, GoogleApiClient.ConnectionCallbacks, LocationListener {
 
-    private final String PLAY_LOG_TAG = "PlaySvcsDemo";
+    private final String LOG_TAG = "PlaySvcsDemo";
+
+    /*in milliseconds */
+    private final long LOC_UPDATE_INTERVAL = 10000;
+    private final long LOC_FASTEST_UPDATE = 5000;
+
+    private Location mCurrentLocation;
+    private LocationRequest mLocationRequest;
 
     protected GoogleApiClient mGoogleApiClient;
+    private boolean mListeningForUpdates;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        Log.i(PLAY_LOG_TAG, "onCreate: Building GoogleApiClient");
+        Log.i(LOG_TAG, "onCreate: Building GoogleApiClient");
         mGoogleApiClient = new GoogleApiClient.Builder(this)
                 .addConnectionCallbacks(this)
                 .addOnConnectionFailedListener(this)
                 .addApiIfAvailable(Wearable.API)
                 .addApi(LocationServices.API)
                 .build();
+
+        mLocationRequest = new LocationRequest();
+        mLocationRequest.setInterval(LOC_UPDATE_INTERVAL);
+        mLocationRequest.setFastestInterval(LOC_FASTEST_UPDATE);
+        mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
     }
 
     @Override
     protected void onStart() {
         super.onStart();
-        Log.i(PLAY_LOG_TAG, "onStart: Connecting to Play Svcs");
+        mGoogleApiClient.connect();
+    }
 
-        GoogleApiAvailability googleApiAvailability = GoogleApiAvailability.getInstance();
-        int resultCode = googleApiAvailability.isGooglePlayServicesAvailable(this);
-        if (resultCode != ConnectionResult.SUCCESS) {
-            googleApiAvailability.getErrorDialog(this, resultCode, 1).show();
-        } else {
-            mGoogleApiClient.connect();
-        }
+    @Override
+    protected void onStop() {
+        mGoogleApiClient.disconnect();
+        super.onStop();
     }
 
     /*Two methods for the ConnectionCallbacks interface : */
     @Override
     public void onConnected(@Nullable Bundle bundle) {
 
-        Log.i(PLAY_LOG_TAG, "called onConnected");
-        if (mGoogleApiClient.hasConnectedApi(Wearable.API)) {
-            Log.i(PLAY_LOG_TAG, "wearable api present");
-        } else {
-            Log.i(PLAY_LOG_TAG, "no wearable present");
-        }
+        Log.i(LOG_TAG, "called onConnected");
 
         if (mGoogleApiClient.hasConnectedApi(LocationServices.API)) {
-            Log.i(PLAY_LOG_TAG, "location api present");
+            Log.i(LOG_TAG, "location api present");
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
-
-                // TODO: Consider calling
-                //    ActivityCompat#requestPermissions
-                // here to request the missing permissions, and then overriding
-                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-                //                                          int[] grantResults)
-                // to handle the case where the user grants the permission. See the documentation
-                // for ActivityCompat#requestPermissions for more details.
                 return;
             }
-            Log.i(PLAY_LOG_TAG, "onConnected location " + getLocation());
+            mCurrentLocation = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
+
+            Log.i(LOG_TAG, "Last known location: " + mCurrentLocation);
 
         } else {
-            Log.i(PLAY_LOG_TAG, "no location present");
+            Log.i(LOG_TAG, "no location present");
         }
+    }
+
+    private void startLocationUpdates() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient,
+                mLocationRequest, this);
+        Log.i(LOG_TAG, "listening for updates");
+    }
+
+    private void stopLocationUpdates() {
+        LocationServices.FusedLocationApi.removeLocationUpdates(mGoogleApiClient, this);
+        Log.i(LOG_TAG, "no longer listening for updates");
     }
 
     @Override
     public void onConnectionSuspended(int i) {
-        Log.i(PLAY_LOG_TAG, "onConnectionSuspended due to cause: " + i);
+        Log.i(LOG_TAG, "onConnectionSuspended due to cause: " + i);
         mGoogleApiClient.connect();
     }
 
     /*For the OnConnectionFailedListener interface */
     @Override
     public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
-        Log.i(PLAY_LOG_TAG, "onConnectionFailed due to cause: " + connectionResult.getErrorMessage());
-        Log.i(PLAY_LOG_TAG, "onConnectionFailed due to cause: " + connectionResult.getErrorCode());
+        Log.i(LOG_TAG, "onConnectionFailed due to cause: " + connectionResult.getErrorMessage());
+        Log.i(LOG_TAG, "onConnectionFailed due to cause: " + connectionResult.getErrorCode());
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         if (requestCode == 1) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Log.i(PLAY_LOG_TAG, "on result location " + getLocation());
+                Log.i(LOG_TAG, "on result location " + getLocation());
             }
         }
     }
@@ -111,6 +127,21 @@ public class MainActivity extends AppCompatActivity
             return location;
         } catch (SecurityException e) {
             return null;
+        }
+    }
+
+    @Override
+    public void onLocationChanged(Location location) {
+        Log.i(LOG_TAG, "Location changed to: " + location);
+    }
+
+    public void onToggleListening(View view) {
+        if (mListeningForUpdates) {
+            stopLocationUpdates();
+            mListeningForUpdates = false;
+        } else {
+            startLocationUpdates();
+            mListeningForUpdates = true;
         }
     }
 }
